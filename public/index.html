@@ -34,6 +34,10 @@
         <!-- Camera Tab -->
         <section id="camera-section" class="tab-content active">
             <div class="camera-container">
+                <div class="filter-selection">
+                    <h3>✨ Elige tu marco perfecto ✨</h3>
+                    <div class="filter-buttons"></div>
+                </div>
                 <div class="camera-frame">
                     <div class="camera-wrapper">
                         <video id="video" autoplay playsinline></video>
@@ -41,10 +45,6 @@
                         <div id="filter-overlay" class="filter-overlay"><img id="filter-image" src="" alt="Filtro"></div>
                         <div id="no-camera" class="no-camera" style="display:none;"><i class="fas fa-camera-slash"></i><h3>Cámara no disponible</h3><p>Permite acceso a la cámara.</p></div>
                     </div>
-                </div>
-                <div class="filter-selection">
-                    <h3>✨ Elige tu marco perfecto ✨</h3>
-                    <div class="filter-buttons"></div>
                 </div>
                 <div class="camera-controls"><button id="take-photo" class="capture-button"><i class="fas fa-heart-circle-plus"></i>Capturar Este Momento</button></div>
             </div>
