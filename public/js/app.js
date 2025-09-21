@@ -1,4 +1,4 @@
-// App.js - Aplicación principal con diagnóstico integrado de filtros
+  // App.js - Aplicación principal optimizada para móviles
 class PhotoBoothApp {
     constructor() {
         this.cameraController = null;
@@ -8,13 +8,19 @@ class PhotoBoothApp {
         this.currentTab = 'camera';
         this.initializationAttempts = 0;
         this.maxInitializationAttempts = 3;
+        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        this.isTouch = 'ontouchstart' in window;
+        
+        console.log('🎉 Iniciando PhotoBooth App...');
+        console.log('📱 Es móvil:', this.isMobile);
+        console.log('👆 Soporta touch:', this.isTouch);
         
         this.init();
     }
 
     async init() {
-        console.log('🎉 Iniciando PhotoBooth App...');
         this.initializationAttempts++;
+        console.log(`🚀 Intento de inicialización #${this.initializationAttempts}`);
         
         // Esperar a que el DOM esté completamente cargado
         if (document.readyState === 'loading') {
@@ -24,12 +30,14 @@ class PhotoBoothApp {
         }
 
         try {
+            // Verificar elementos esenciales del DOM
+            await this.checkEssentialElements();
+            
+            // Configurar viewport para móviles
+            this.setupMobileViewport();
+            
             // Inicializar diagnóstico primero
             this.diagnostic = new FilterDiagnostic();
-            
-            // Ejecutar diagnóstico básico
-            console.log('🔬 Ejecutando diagnóstico inicial...');
-            await this.diagnostic.runFullDiagnostic();
             
             // Inicializar componentes
             await this.initializeComponents();
@@ -43,12 +51,75 @@ class PhotoBoothApp {
             // Configurar botones de filtro mejorados
             this.setupEnhancedFilterButtons();
             
+            // Configuración específica para móviles
+            if (this.isMobile) {
+                this.setupMobileSpecific();
+            }
+            
             console.log('✅ PhotoBooth App inicializado exitosamente');
+            this.showInitializationSuccess();
             
         } catch (error) {
             console.error('❌ Error al inicializar la aplicación:', error);
             await this.handleInitializationError(error);
         }
+    }
+
+    async checkEssentialElements() {
+        console.log('🔍 Verificando elementos esenciales del DOM...');
+        
+        const essentialElements = [
+            'video',
+            'canvas', 
+            'take-photo',
+            'photo-modal',
+            'captured-photo'
+        ];
+        
+        const missingElements = [];
+        
+        essentialElements.forEach(id => {
+            const element = document.getElementById(id);
+            if (!element) {
+                missingElements.push(id);
+            }
+        });
+        
+        if (missingElements.length > 0) {
+            throw new Error(`Elementos faltantes en el DOM: ${missingElements.join(', ')}`);
+        }
+        
+        console.log('✅ Todos los elementos esenciales están presentes');
+    }
+
+    setupMobileViewport() {
+        if (!this.isMobile) return;
+        
+        console.log('📱 Configurando viewport para móviles...');
+        
+        // Asegurar viewport meta tag
+        let viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) {
+            viewport = document.createElement('meta');
+            viewport.name = 'viewport';
+            document.head.appendChild(viewport);
+        }
+        viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        
+        // Prevenir zoom en inputs
+        const inputs = document.querySelectorAll('input, textarea, select');
+        inputs.forEach(input => {
+            if (!input.style.fontSize) {
+                input.style.fontSize = '16px'; // Previene zoom en iOS
+            }
+        });
+        
+        // Configurar body para móviles
+        document.body.style.touchAction = 'manipulation'; // Mejora la respuesta táctil
+        document.body.style.webkitUserSelect = 'none'; // Previene selección accidental
+        document.body.style.userSelect = 'none';
+        
+        console.log('✅ Viewport móvil configurado');
     }
 
     async handleInitializationError(error) {
@@ -70,6 +141,7 @@ class PhotoBoothApp {
         try {
             // Solo inicializar controlador de cámara básico
             this.cameraController = new CameraController();
+            window.cameraController = this.cameraController;
             
             // Crear filtros de demostración
             await this.createFallbackFilters();
@@ -78,53 +150,68 @@ class PhotoBoothApp {
             
         } catch (fallbackError) {
             console.error('💀 Error crítico en modo de respaldo:', fallbackError);
-            this.showCriticalError();
+            this.showCriticalError(fallbackError);
         }
     }
 
     async initializeComponents() {
         console.log('🔧 Inicializando componentes...');
 
-        // Inicializar controlador de cámara mejorado
-        this.cameraController = new EnhancedCameraController();
+        // Inicializar controlador de cámara
+        this.cameraController = new CameraController();
+        window.cameraController = this.cameraController;
 
-        // Esperar a que la cámara esté lista
-        await this.waitForCameraReady();
+        // Esperar a que la cámara esté lista con timeout más largo para móviles
+        const cameraTimeout = this.isMobile ? 10000 : 5000;
+        await this.waitForCameraReady(cameraTimeout);
         
-        // Inicializar manager de filtros
-        this.filterManager = new FilterManager(this.cameraController);
-        await this.filterManager.init();
-        this.updateFilterButtons(this.filterManager.availableFilters);
-        
-        // Vincular filtros al controlador de cámara
-        this.cameraController.setFilterManager(this.filterManager);
+        // Inicializar manager de filtros si está disponible
+        if (typeof FilterManager !== 'undefined') {
+            this.filterManager = new FilterManager(this.cameraController);
+            await this.filterManager.init();
+            this.updateFilterButtons(this.filterManager.availableFilters);
+            
+            // Vincular filtros al controlador de cámara
+            if (this.cameraController.setFilterManager) {
+                this.cameraController.setFilterManager(this.filterManager);
+            }
+            
+            window.filterManager = this.filterManager;
+        } else {
+            console.warn('⚠️ FilterManager no disponible, usando filtros básicos');
+            await this.createFallbackFilters();
+        }
         
         // Inicializar galería si existe
         if (typeof GalleryController !== 'undefined') {
-            this.galleryController = new GalleryController();
-            window.galleryController = this.galleryController;
+            try {
+                this.galleryController = new GalleryController();
+                window.galleryController = this.galleryController;
+                console.log('✅ GalleryController inicializado');
+            } catch (error) {
+                console.warn('⚠️ Error inicializando GalleryController:', error);
+            }
+        } else {
+            console.warn('⚠️ GalleryController no disponible');
         }
         
-        // Hacer disponibles globalmente
-        window.cameraController = this.cameraController;
-        window.filterManager = this.filterManager;
+        // Hacer disponible el diagnóstico globalmente
         window.diagnostic = this.diagnostic;
         
         console.log('✅ Componentes inicializados');
     }
 
-    async waitForCameraReady() {
-        const maxWait = 5000; // 5 segundos
-        const checkInterval = 100; // Revisar cada 100ms
+    async waitForCameraReady(timeout = 5000) {
+        const checkInterval = 200;
         let waited = 0;
         
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const checkCamera = () => {
-                if (this.cameraController.stream && this.cameraController.video.videoWidth > 0) {
+                if (this.cameraController.stream && this.cameraController.video && this.cameraController.video.videoWidth > 0) {
                     console.log('📹 Cámara lista');
                     resolve();
-                } else if (waited >= maxWait) {
-                    console.warn('⏰ Timeout esperando cámara, continuando...');
+                } else if (waited >= timeout) {
+                    console.warn(`⏰ Timeout esperando cámara después de ${timeout}ms, continuando...`);
                     resolve(); // No rechazar, continuar sin cámara
                 } else {
                     waited += checkInterval;
@@ -151,14 +238,30 @@ class PhotoBoothApp {
             this.handleGlobalError(event.reason);
         });
 
-        // Orientación de dispositivo
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                if (this.filterManager) {
-                    this.filterManager.repositionFilter();
-                }
-            }, 500);
-        });
+        // Orientación de dispositivo (móviles)
+        if (this.isMobile) {
+            window.addEventListener('orientationchange', () => {
+                console.log('🔄 Cambio de orientación detectado');
+                setTimeout(() => {
+                    this.handleOrientationChange();
+                }, 500);
+            });
+            
+            // También escuchar resize en móviles
+            window.addEventListener('resize', () => {
+                setTimeout(() => {
+                    this.handleOrientationChange();
+                }, 300);
+            });
+        } else {
+            window.addEventListener('resize', () => {
+                setTimeout(() => {
+                    if (this.filterManager) {
+                        this.filterManager.repositionFilter();
+                    }
+                }, 100);
+            });
+        }
 
         // Visibilidad de la página
         document.addEventListener('visibilitychange', () => {
@@ -169,14 +272,55 @@ class PhotoBoothApp {
             }
         });
 
+        // Prevenir zoom en móviles al hacer doble tap
+        if (this.isMobile) {
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', (event) => {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            });
+        }
+
         console.log('✅ Eventos globales configurados');
+    }
+
+    handleOrientationChange() {
+        console.log('🔄 Manejando cambio de orientación/tamaño...');
+        
+        if (this.filterManager && this.filterManager.repositionFilter) {
+            this.filterManager.repositionFilter();
+        }
+        
+        if (this.cameraController && this.cameraController.handleOrientationChange) {
+            this.cameraController.handleOrientationChange();
+        }
+        
+        // Reconfigurar viewport si es necesario
+        if (this.isMobile) {
+            setTimeout(() => {
+                this.setupMobileViewport();
+            }, 100);
+        }
     }
 
     handleGlobalError(error) {
         // Si hay muchos errores de filtros, intentar recrearlos
-        if (error.message && error.message.includes('filter')) {
+        if (error && error.message && error.message.includes('filter')) {
             console.log('🔄 Error de filtro detectado, intentando reparación...');
             this.repairFilters();
+        }
+        
+        // Si hay errores de cámara, intentar reinicializar
+        if (error && error.message && (error.message.includes('camera') || error.message.includes('getUserMedia'))) {
+            console.log('🔄 Error de cámara detectado, intentando reinicialización...');
+            setTimeout(() => {
+                if (this.cameraController && this.cameraController.init) {
+                    this.cameraController.init();
+                }
+            }, 2000);
         }
     }
 
@@ -184,12 +328,13 @@ class PhotoBoothApp {
         try {
             console.log('🔧 Reparando sistema de filtros...');
             
-            if (this.filterManager) {
+            if (this.filterManager && this.filterManager.regenerateFilters) {
                 await this.filterManager.regenerateFilters();
             } else {
                 await this.createFallbackFilters();
             }
             
+            this.setupEnhancedFilterButtons();
             console.log('✅ Sistema de filtros reparado');
         } catch (error) {
             console.error('❌ No se pudieron reparar los filtros:', error);
@@ -199,113 +344,22 @@ class PhotoBoothApp {
     async createFallbackFilters() {
         console.log('🎨 Creando filtros de respaldo...');
         
-        const fallbackFilters = {
-            'elegant': this.generateElegantFilter(),
-            'romantic': this.generateRomanticFilter(),
-            'vintage': this.generateVintageFilter()
-        };
-        
-        // Si existe FilterManager, usar su caché
-        if (this.filterManager) {
-            Object.entries(fallbackFilters).forEach(([name, data]) => {
-                this.filterManager.filterCache.set(name, data);
-            });
-        }
+        const fallbackFilters = ['elegant', 'romantic', 'vintage', 'classic'];
         
         // Actualizar botones
-        this.updateFilterButtons(Object.keys(fallbackFilters));
+        this.updateFilterButtons(fallbackFilters);
         
-        console.log('✅ Filtros de respaldo creados:', Object.keys(fallbackFilters));
-    }
-
-    generateElegantFilter() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 640;
-        canvas.height = 480;
-        const ctx = canvas.getContext('2d');
-        
-        // Marco dorado elegante
-        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-        gradient.addColorStop(0, '#d4af37');
-        gradient.addColorStop(0.5, '#ffd700');
-        gradient.addColorStop(1, '#b8860b');
-        
-        ctx.strokeStyle = gradient;
-        ctx.lineWidth = 20;
-        ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-        
-        ctx.strokeStyle = 'rgba(139, 75, 90, 0.8)';
-        ctx.lineWidth = 6;
-        ctx.strokeRect(25, 25, canvas.width - 50, canvas.height - 50);
-        
-        // Texto
-        ctx.font = 'italic 24px serif';
-        ctx.fillStyle = '#8b4b5a';
-        ctx.textAlign = 'center';
-        ctx.fillText('Elva & Samuel', canvas.width / 2, 50);
-        
-        return canvas.toDataURL('image/png');
-    }
-
-    generateRomanticFilter() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 640;
-        canvas.height = 480;
-        const ctx = canvas.getContext('2d');
-        
-        // Corazones en las esquinas
-        ctx.font = 'bold 40px Arial';
-        ctx.fillStyle = '#ff69b4';
-        ctx.fillText('♥', 20, 50);
-        ctx.fillText('♥', canvas.width - 60, 50);
-        ctx.fillText('♥', 20, canvas.height - 10);
-        ctx.fillText('♥', canvas.width - 60, canvas.height - 10);
-        
-        // Marco decorativo
-        ctx.strokeStyle = '#c49b90';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([10, 5]);
-        ctx.strokeRect(15, 60, canvas.width - 30, canvas.height - 120);
-        
-        // Texto
-        ctx.setLineDash([]);
-        ctx.font = 'bold 28px cursive';
-        ctx.fillStyle = '#8b4b5a';
-        ctx.textAlign = 'center';
-        ctx.fillText('Amor Eterno', canvas.width / 2, 40);
-        
-        return canvas.toDataURL('image/png');
-    }
-
-    generateVintageFilter() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 640;
-        canvas.height = 480;
-        const ctx = canvas.getContext('2d');
-        
-        // Efecto sepia
-        ctx.fillStyle = 'rgba(222, 184, 135, 0.2)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Marco vintage
-        ctx.strokeStyle = '#8b7355';
-        ctx.lineWidth = 12;
-        ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-        
-        // Ornamentos
-        ctx.fillStyle = '#654321';
-        ctx.font = '20px serif';
-        ctx.fillText('✧', 30, 40);
-        ctx.fillText('✧', canvas.width - 50, 40);
-        ctx.fillText('✧', 30, canvas.height - 20);
-        ctx.fillText('✧', canvas.width - 50, canvas.height - 20);
-        
-        return canvas.toDataURL('image/png');
+        console.log('✅ Filtros de respaldo creados:', fallbackFilters);
     }
 
     updateFilterButtons(filterNames) {
         const container = document.querySelector('.filter-buttons');
-        if (!container) return;
+        if (!container) {
+            console.warn('⚠️ Contenedor de botones de filtro no encontrado');
+            return;
+        }
+        
+        console.log('🔘 Actualizando botones de filtro:', filterNames);
         
         // Mantener botón "none"
         const existingNone = container.querySelector('[data-filter="none"]');
@@ -314,40 +368,66 @@ class PhotoBoothApp {
         if (existingNone) {
             container.appendChild(existingNone);
         } else {
-            const noneBtn = document.createElement('button');
-            noneBtn.className = 'filter-btn active';
-            noneBtn.setAttribute('data-filter', 'none');
-            noneBtn.innerHTML = '<i class="fas fa-camera"></i>Natural';
+            const noneBtn = this.createFilterButton('none', 'Natural', 'fas fa-camera');
             container.appendChild(noneBtn);
         }
         
         // Agregar nuevos botones
         filterNames.forEach(name => {
-            const btn = document.createElement('button');
-            btn.className = 'filter-btn';
-            btn.setAttribute('data-filter', name);
-            btn.innerHTML = `<i class="fas fa-frame"></i>${name.charAt(0).toUpperCase() + name.slice(1)}`;
-            container.appendChild(btn);
+            if (name !== 'none') {
+                const btn = this.createFilterButton(name, name.charAt(0).toUpperCase() + name.slice(1), 'fas fa-frame');
+                container.appendChild(btn);
+            }
         });
         
         // Reaplicar event listeners
         this.setupEnhancedFilterButtons();
     }
 
+    createFilterButton(filter, text, iconClass) {
+        const btn = document.createElement('button');
+        btn.className = filter === 'none' ? 'filter-btn active' : 'filter-btn';
+        btn.setAttribute('data-filter', filter);
+        btn.innerHTML = `<i class="${iconClass}"></i>${text}`;
+        
+        // Configuración específica para móviles
+        if (this.isMobile) {
+            btn.style.minHeight = '44px'; // Tamaño mínimo para touch
+            btn.style.padding = '0.75rem';
+            btn.style.fontSize = '0.9rem';
+        }
+        
+        return btn;
+    }
+
     setupTabNavigation() {
         const tabButtons = document.querySelectorAll('.tab-btn');
         const tabContents = document.querySelectorAll('.tab-content');
 
+        console.log('📑 Configurando navegación de tabs:', tabButtons.length);
+
         tabButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const targetTab = button.getAttribute('data-tab');
-                this.switchTab(targetTab, tabButtons, tabContents);
-                document.dispatchEvent(new CustomEvent('tabChanged', { detail: { tab: targetTab } }));
-            });
+            const setupTabEvent = (eventType) => {
+                button.addEventListener(eventType, (e) => {
+                    e.preventDefault();
+                    const targetTab = button.getAttribute('data-tab');
+                    this.switchTab(targetTab, tabButtons, tabContents);
+                    document.dispatchEvent(new CustomEvent('tabChanged', { detail: { tab: targetTab } }));
+                });
+            };
+            
+            setupTabEvent('click');
+            
+            // Agregar soporte touch para móviles
+            if (this.isTouch) {
+                setupTabEvent('touchend');
+            }
         });
     }
 
     switchTab(targetTab, tabButtons, tabContents) {
+        console.log('🔄 Cambiando a tab:', targetTab);
+        
         // Actualizar botones
         tabButtons.forEach(btn => btn.classList.remove('active'));
         const activeButton = document.querySelector(`[data-tab="${targetTab}"]`);
@@ -369,11 +449,25 @@ class PhotoBoothApp {
 
         // Acciones específicas por tab
         if (targetTab === 'gallery' && this.galleryController) {
-            this.galleryController.loadPhotos();
-        } else if (targetTab === 'camera' && this.filterManager) {
+            console.log('📸 Cargando galería...');
             setTimeout(() => {
-                if (this.filterManager.currentFilter !== 'none') {
+                if (typeof this.galleryController.loadPhotos === 'function') {
+                    this.galleryController.loadPhotos();
+                }
+            }, 100);
+        } else if (targetTab === 'camera') {
+            console.log('📹 Activando cámara...');
+            setTimeout(() => {
+                if (this.filterManager && this.filterManager.currentFilter !== 'none') {
                     this.filterManager.repositionFilter();
+                }
+                
+                // Reanudar cámara si estaba pausada
+                if (this.cameraController && this.cameraController.stream) {
+                    const videoTracks = this.cameraController.stream.getVideoTracks();
+                    videoTracks.forEach(track => {
+                        track.enabled = true;
+                    });
                 }
             }, 100);
         }
@@ -384,45 +478,106 @@ class PhotoBoothApp {
         console.log('🔘 Configurando botones de filtro mejorados:', filterButtons.length);
         
         filterButtons.forEach((button) => {
-            // Remover listeners existentes
-            button.replaceWith(button.cloneNode(true));
+            // Remover listeners existentes clonando el elemento
+            const newButton = button.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
         });
         
         // Reagregar listeners a los botones nuevos
         document.querySelectorAll('.filter-btn').forEach((button) => {
-            button.addEventListener('click', async (e) => {
-                e.preventDefault();
-                const filter = button.getAttribute('data-filter');
-                console.log('🖱️ Filtro seleccionado:', filter);
-                
-                try {
-                    // Actualizar botones activos
-                    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-                    button.classList.add('active');
+            const setupFilterEvent = (eventType) => {
+                button.addEventListener(eventType, async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     
-                    // Aplicar filtro
-                    if (this.filterManager) {
-                        await this.filterManager.applyFilter(filter);
-                    } else if (this.cameraController) {
-                        this.cameraController.applyFilter(filter);
+                    const filter = button.getAttribute('data-filter');
+                    console.log(`🖱️ Filtro seleccionado (${eventType}):`, filter);
+                    
+                    try {
+                        // Feedback visual inmediato
+                        button.style.transform = 'scale(0.95)';
+                        setTimeout(() => {
+                            button.style.transform = '';
+                        }, 150);
+                        
+                        // Actualizar botones activos
+                        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+                        
+                        // Aplicar filtro
+                        if (this.filterManager && this.filterManager.applyFilter) {
+                            await this.filterManager.applyFilter(filter);
+                        } else if (this.cameraController && this.cameraController.applyFilter) {
+                            this.cameraController.applyFilter(filter);
+                        }
+                        
+                        console.log(`✅ Filtro ${filter} aplicado`);
+                        
+                    } catch (error) {
+                        console.error(`❌ Error aplicando filtro ${filter}:`, error);
+                        this.showErrorMessage(`Error al aplicar filtro: ${filter}`);
+                        
+                        // Volver al filtro "none" en caso de error
+                        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+                        const noneButton = document.querySelector('[data-filter="none"]');
+                        if (noneButton) {
+                            noneButton.classList.add('active');
+                        }
                     }
-                    
-                    console.log(`✅ Filtro ${filter} aplicado`);
-                    
-                } catch (error) {
-                    console.error(`❌ Error aplicando filtro ${filter}:`, error);
-                    this.showErrorMessage(`Error al aplicar filtro: ${filter}`);
-                    
-                    // Volver al filtro "none" en caso de error
-                    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-                    document.querySelector('[data-filter="none"]')?.classList.add('active');
-                }
-            });
+                });
+            };
+            
+            setupFilterEvent('click');
+            
+            // Agregar soporte touch para móviles
+            if (this.isTouch) {
+                setupFilterEvent('touchend');
+            }
         });
+    }
+
+    setupMobileSpecific() {
+        console.log('📱 Configurando funcionalidades específicas para móviles...');
+        
+        // Prevenir scroll cuando se esté usando la cámara
+        const cameraSection = document.getElementById('camera-section');
+        if (cameraSection) {
+            cameraSection.addEventListener('touchmove', (e) => {
+                // Permitir scroll solo en elementos específicos
+                if (!e.target.closest('.scrollable')) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
+        
+        // Mejorar la respuesta de los botones
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            button.addEventListener('touchstart', function() {
+                this.style.backgroundColor = this.style.backgroundColor || '#e0e0e0';
+            }, { passive: true });
+            
+            button.addEventListener('touchend', function() {
+                setTimeout(() => {
+                    this.style.backgroundColor = '';
+                }, 150);
+            }, { passive: true });
+        });
+        
+        // Configurar botón de tomar foto para móviles
+        const takePhotoBtn = document.getElementById('take-photo');
+        if (takePhotoBtn) {
+            takePhotoBtn.style.minHeight = '60px';
+            takePhotoBtn.style.fontSize = '1.1rem';
+            takePhotoBtn.style.fontWeight = 'bold';
+        }
+        
+        console.log('✅ Configuraciones móviles aplicadas');
     }
 
     pauseApp() {
         console.log('⏸️ Pausando aplicación...');
+        
         if (this.cameraController && this.cameraController.stream) {
             const videoTracks = this.cameraController.stream.getVideoTracks();
             videoTracks.forEach(track => {
@@ -433,18 +588,56 @@ class PhotoBoothApp {
 
     resumeApp() {
         console.log('▶️ Reanudando aplicación...');
+        
         if (this.cameraController && this.cameraController.stream) {
             const videoTracks = this.cameraController.stream.getVideoTracks();
             videoTracks.forEach(track => {
                 track.enabled = true;
             });
             
-            if (this.filterManager) {
+            if (this.filterManager && this.filterManager.repositionFilter) {
                 setTimeout(() => {
                     this.filterManager.repositionFilter();
                 }, 300);
             }
         }
+    }
+
+    showInitializationSuccess() {
+        const notification = document.createElement('div');
+        notification.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            <span>¡PhotoBooth listo!</span>
+        `;
+        
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: this.isMobile ? '60px' : '20px',
+            right: '20px',
+            left: this.isMobile ? '20px' : 'auto',
+            background: '#28a745',
+            color: 'white',
+            padding: '1rem 2rem',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            zIndex: '4000',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+            animation: 'fadeIn 0.3s ease-out'
+        });
+
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.style.animation = 'fadeOut 0.3s ease-in forwards';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 2000);
     }
 
     showErrorMessage(message) {
@@ -456,57 +649,72 @@ class PhotoBoothApp {
             <button onclick="this.parentElement.remove()" style="margin-left: auto; background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer;">×</button>
         `;
         
-        errorDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #dc3545;
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            z-index: 4000;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            animation: slideInRight 0.3s ease-out;
-            max-width: 400px;
-        `;
+        Object.assign(errorDiv.style, {
+            position: 'fixed',
+            top: this.isMobile ? '60px' : '20px',
+            right: '20px',
+            left: this.isMobile ? '20px' : 'auto',
+            background: '#dc3545',
+            color: 'white',
+            padding: '1rem 2rem',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            zIndex: '4000',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+            animation: 'slideIn 0.3s ease-out',
+            maxWidth: this.isMobile ? 'none' : '400px'
+        });
 
         document.body.appendChild(errorDiv);
 
         setTimeout(() => {
             if (errorDiv.parentNode) {
-                errorDiv.style.animation = 'slideOutRight 0.3s ease-in forwards';
+                errorDiv.style.animation = 'slideOut 0.3s ease-in forwards';
                 setTimeout(() => {
                     if (errorDiv.parentNode) {
                         errorDiv.parentNode.removeChild(errorDiv);
                     }
                 }, 300);
             }
-        }, 10000);
+        }, 8000);
     }
 
-    showCriticalError() {
+    showCriticalError(error) {
         const errorDiv = document.createElement('div');
         errorDiv.innerHTML = `
-            <div style="background: #f8f9fa; border-radius: 15px; padding: 3rem; text-align: center; color: #495057; max-width: 500px; margin: 2rem auto;">
-                <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: #ffc107; margin-bottom: 2rem;"></i>
-                <h2 style="margin-bottom: 1rem;">Error Crítico</h2>
-                <p style="margin-bottom: 2rem;">No se pudo inicializar la aplicación correctamente. Esto puede deberse a:</p>
-                <ul style="text-align: left; margin-bottom: 2rem;">
-                    <li>Problemas de acceso a la cámara</li>
-                    <li>Filtros no disponibles</li>
-                    <li>Problemas de conectividad</li>
-                </ul>
-                <button onclick="window.location.reload()" style="background: #007bff; color: white; border: none; padding: 1rem 2rem; border-radius: 25px; cursor: pointer; font-size: 1.1rem;">
-                    <i class="fas fa-redo"></i> Recargar Página
-                </button>
+            <div style="background: #f8f9fa; border-radius: 15px; padding: 2rem; text-align: center; color: #495057; max-width: 500px; margin: 2rem auto;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #ffc107; margin-bottom: 1rem;"></i>
+                <h2 style="margin-bottom: 1rem; font-size: ${this.isMobile ? '1.5rem' : '2rem'};">Error Crítico</h2>
+                <p style="margin-bottom: 1.5rem; font-size: ${this.isMobile ? '0.9rem' : '1rem'};">No se pudo inicializar la aplicación correctamente.</p>
+                <div style="text-align: left; margin-bottom: 1.5rem; font-size: 0.9rem;">
+                    <p><strong>Posibles causas:</strong></p>
+                    <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                        <li>Problemas de acceso a la cámara</li>
+                        <li>Navegador no compatible</li>
+                        <li>Conexión inestable</li>
+                        ${this.isMobile ? '<li>Permisos de cámara denegados</li>' : ''}
+                    </ul>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="window.location.reload()" style="background: #007bff; color: white; border: none; padding: 1rem 2rem; border-radius: 25px; cursor: pointer; font-size: 1rem; min-width: 120px;">
+                        <i class="fas fa-redo"></i> Recargar
+                    </button>
+                    ${!this.isMobile ? `
+                        <button onclick="window.debugPhotoBoothApp && window.debugPhotoBoothApp()" style="background: #6c757d; color: white; border: none; padding: 1rem 2rem; border-radius: 25px; cursor: pointer; font-size: 1rem; min-width: 120px;">
+                            <i class="fas fa-bug"></i> Debug
+                        </button>
+                    ` : ''}
+                </div>
+                <p style="color: #999; font-size: 0.8rem; margin-top: 1.5rem;">
+                    Error: ${error?.message || 'Error desconocido'}
+                </p>
             </div>
         `;
         
         // Insertar en el contenido principal
-        const mainContent = document.querySelector('.main-content');
+        const mainContent = document.querySelector('.main-content') || document.body;
         if (mainContent) {
             mainContent.innerHTML = errorDiv.innerHTML;
         }
