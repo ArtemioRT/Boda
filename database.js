@@ -31,6 +31,7 @@ async function initializeDatabase() {
       )
     `);
     
+    await client.query(`ALTER TABLE wedding_photos ADD COLUMN IF NOT EXISTS notes TEXT`);
     console.log('✅ Tabla wedding_photos creada exitosamente');
   } catch (error) {
     console.error('❌ Error al crear la tabla:', error);

@@ -94,6 +94,7 @@ class PhotoBoothApp {
         // Inicializar manager de filtros
         this.filterManager = new FilterManager(this.cameraController);
         await this.filterManager.init();
+        this.updateFilterButtons(this.filterManager.availableFilters);
         
         // Vincular filtros al controlador de cámara
         this.cameraController.setFilterManager(this.filterManager);

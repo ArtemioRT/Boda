@@ -12,13 +12,13 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
-app.use('/filters', express.static(path.join(__dirname, 'filters')));
+app.use('/filters', express.static(path.join(__dirname, 'public', 'filters')));
 
 // Endpoint para listar filtros dinámicamente
 app.get('/api/filters', (req, res) => {
   const fs = require('fs');
   const path = require('path');
-  fs.readdir(path.join(__dirname, 'filters'), (err, files) => {
+  fs.readdir(path.join(__dirname, 'public', 'filters'), (err, files) => {
     if (err) {
       console.error('Error al leer filtros:', err);
       return res.status(500).json({ error: 'No se pudo leer la carpeta de filtros' });
